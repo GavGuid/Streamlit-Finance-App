@@ -1,5 +1,8 @@
 import streamlit as st
 import time
+from datetime import datetime, timedelta, date
+import calendar
+import pandas as pd
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Dashboard", layout="wide")
@@ -9,6 +12,18 @@ st.markdown(
     "<h1 style='text-align: center; font-size: 42px; margin-bottom: 10px;'>💰 Guidry Money</h1>",
     unsafe_allow_html=True
 )
+
+
+
+
+
+
+
+
+
+
+# ---- Account Balances Section ----
+st.markdown("<h2 style='text-align: left;'>Account Balances</h2>", unsafe_allow_html=True)
 
 # --- Time Range Selector (Dropdown) ---
 st.markdown("###### Select time range")
@@ -51,13 +66,466 @@ with st.spinner("Loading your dashboard..."):
             expenses = round(data["expenses"] * multiplier)
             net_change = income - expenses
 
+            # Determine the color based on net_change
+            if net_change >= 0:
+                color = "green"
+            else:
+                color = "red"
+
             with cols[i]:
                 st.subheader(acct_name)
-                st.metric(label="Balance", value=f"${data['balance']:,}")
-                st.metric(
-                    label="Net Change",
-                    value=f"${net_change:,}",
-                    delta=f"${net_change:,}",
-                    delta_color="normal"
-                )
+                st.metric(label="Balance", value=f"${data['balance']:,}") # Keep balance as a standard metric
 
+                # Display Net Change with dynamic color using markdown
+                st.markdown(
+                    f"""
+                    <div style='text-align: left;'>
+                        <div style='font-size: 14px; color: grey;'>Net Change</div>
+                        <div style='font-size: 24px; color: {color};'>
+                            ${net_change:,}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+st.markdown("---")
+
+
+
+
+
+
+
+
+
+
+
+
+# --- Paycheck & Bill Schedule Section ---
+
+st.markdown("<h2 style='text-align: left;'>Paycheck & Bill Schedule</h2>", unsafe_allow_html=True)
+
+# ---- Configuration ----
+paycheck_start_date = date(2025, 1, 7)  # Hardcoded start date
+paycheck_amount = 2122.24  # Hardcoded paycheck amount
+bill_schedule = [
+    #Fixed Days / Amounts
+    {"name": "Mortgage", "type": "fixed", "day": 1, "amount": 2321.04},
+    {"name": "Car Insurance", "type": "fixed", "day": 23, "amount": 165.26},
+    {"name": "Internet", "type": "fixed", "day": 13, "amount": 71.40},
+    {"name": "Student Loan", "type": "fixed", "day": 7, "amount": 141.27},
+    
+    #Range
+    # {"name": "Utilities", "type": "range", "start_day": 13, "end_day": 15},
+
+    #Recurring
+    {"name": "Prime Membership", "type": "recurring", "start_date": date(2025, 1, 29), "interval": 30, "amount": 16.19},
+
+    #Variable Days / Amounts
+    {"name": "Utilities", "type": "fixed", "day": 13, "amount": 200.00},
+    {"name": "Groceries", "type": "variable_estimate", "amount": 400.00},
+    {"name": "Gas", "type": "variable_estimate", "amount": 200.00},
+    # {"name": "Dining Out", "type": "variable_estimate", "amount": 150.00},
+    # {"name": "Miscellaneous", "type": "variable_estimate", "amount": 100.00},
+]
+
+# Get today's date
+today = datetime.now().date()
+
+
+# ---- Date Picker ----
+this_year = datetime.now().year
+months = {calendar.month_name[i]: i for i in range(1, 13)}
+
+
+# ---- Month Dropdown ----
+col1, col2 = st.columns([0.25, 1.8])
+with col1:
+    month_name = st.selectbox("Select month", list(months.keys()), index=datetime.now().month - 1)
+selected_month = months[month_name]
+
+####################################################################################
+# --- Calculate Monthly Projections ---
+total_monthly_expenses = 0
+total_monthly_income = 0
+projected_paychecks_in_month = 0
+
+# New: Initialize lists to store contributions for tooltips
+income_contributions = []
+expense_contributions = []
+
+
+# Calculate total days in the selected month
+days_in_month = calendar.monthrange(this_year, selected_month)[1]
+first_day_of_month = date(this_year, selected_month, 1)
+last_day_of_month = date(this_year, selected_month, days_in_month)
+
+
+# Calculate expenses for the selected month
+for bill in bill_schedule:
+    if bill["type"] == "fixed":
+        # Check if the fixed day falls within the current month
+        if 1 <= bill["day"] <= days_in_month: # Ensure day is valid for the month (e.g., no 31st in Feb)
+            total_monthly_expenses += bill["amount"]
+            expense_contributions.append({
+                "name": bill["name"],
+                "date": date(this_year, selected_month, bill["day"]).strftime("%b %d"),
+                "amount": bill["amount"]
+            })
+  
+    # Not using "Range" bills for now, but keeping the code for future reference
+    # elif bill["type"] == "range":
+    #     # For range bills, assume they are paid once if any part of the range is in the month
+    #     if (bill["start_day"] <= days_in_month and bill["end_day"] >= 1):
+    #         total_monthly_expenses += bill["amount"]
+    #         expense_contributions.append({
+    #             "name": bill["name"],
+    #             "date": f"{date(this_year, selected_month, bill['start_day']).strftime('%b %d')} - {date(this_year, selected_month, bill['end_day']).strftime('%b %d')}",
+    #             "amount": bill["amount"]
+    #         })
+
+    elif bill["type"] == "recurring":
+        # Calculate occurrences within the month for recurring bills
+        current_recurring_date = bill["start_date"]
+        # Fast-forward to the first occurrence in or after the current month
+        while current_recurring_date < first_day_of_month:
+            current_recurring_date += timedelta(days=bill["interval"])
+
+        # Iterate through occurrences within the current month
+        while current_recurring_date <= last_day_of_month:
+            total_monthly_expenses += bill["amount"]
+            expense_contributions.append({
+                "name": bill["name"],
+                "date": current_recurring_date.strftime("%b %d"),
+                "amount": bill["amount"]
+            })
+            current_recurring_date += timedelta(days=bill["interval"])
+
+    elif bill["type"] == "variable_estimate":
+    # Variable estimates are simply added to the total for the month
+        total_monthly_expenses += bill["amount"]
+        expense_contributions.append({
+            "name": bill["name"],
+            "date": "Monthly Estimate", # Indicates it's a general monthly estimate
+            "amount": bill["amount"]
+        })
+
+
+# Calculate income for the selected month (paychecks)
+current_paycheck_date = paycheck_start_date
+# Fast-forward to the first paycheck date in or after the current month
+while current_paycheck_date < first_day_of_month:
+    current_paycheck_date += timedelta(days=14) # Assuming bi-weekly paychecks
+
+
+# Iterate through paychecks within the current month
+while current_paycheck_date <= last_day_of_month:
+    projected_paychecks_in_month += 1
+    total_monthly_income += paycheck_amount
+    income_contributions.append({
+        "name": "Paycheck",
+        "date": current_paycheck_date.strftime("%b %d"),
+        "amount": paycheck_amount
+    })
+    current_paycheck_date += timedelta(days=14)
+
+monthly_net_flow = total_monthly_income - total_monthly_expenses
+
+
+# New: Helper function to generate HTML list for tooltips
+def generate_tooltip_html(contributions):
+    items_html = ""
+    if not contributions:
+        return "<p style='margin: 0; font-style: italic;'>No contributions this month.</p>"
+    for item in contributions:
+        # display_date = item.get("date", "") #Taking out the display date
+        # if display_date:
+        #     display_date = f" ({display_date})"
+        # items_html += f"<li>{item['name']}{display_date}: ${item['amount']:,.2f}</li>"
+
+        items_html += f"<li>{item['name']}: ${item['amount']:,.2f}</li>"
+    return f"<ul>{items_html}</ul>"
+
+income_tooltip_content = generate_tooltip_html(income_contributions)
+expenses_tooltip_content = generate_tooltip_html(expense_contributions)
+
+
+# Determine the color for the Net Flow value (red/green)
+net_flow_color = "green" if monthly_net_flow >= 0 else "red"
+
+
+# New: Inject Custom CSS for Tooltips and Metric Styling
+st.markdown(f"""
+<style>
+    .centered-heading {{
+        text-align: center;
+    }} 
+
+    /* General styling for the custom metrics to match st.metric */
+    .custom-metric-container {{
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center; /* Centers items horizontally within the flex container */
+        justify-content: center; /* Centers items vertically within the flex container */
+        height: 100%;
+        padding: 10px; /* Adjust padding to roughly match st.metric default */
+        position: relative; /* Needed for tooltip positioning */
+    }}
+
+    .custom-metric-label {{
+        font-size: 14px;
+        color: grey;
+        margin-bottom: -0.2rem; /* Small negative margin to bring value closer */
+    }}
+
+    .custom-metric-value {{
+        font-size: 28px; /* Standard st.metric value font size */
+        font-weight: normal; /* Standard st.metric value font weight */
+        line-height: 1.2;
+    }}
+
+    /* Tooltip specific styling */
+    .tooltip-wrapper .tooltip-content {{
+        visibility: hidden;
+        width: max-content; /* Adjust width to content */
+        max-width: 300px; /* Prevent excessively wide tooltips */
+        background-color: #333;
+        color: #fff;
+        text-align: left;
+        border-radius: 6px;
+        padding: 10px;
+        position: absolute;
+        z-index: 1000; /* Ensure tooltip is on top */
+        bottom: 120%; /* Position above the metric */
+        left: 50%;
+        transform: translateX(-50%); /* Center horizontally */
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out; /* Smooth fade-in/out */
+        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        pointer-events: none; /* Allows clicks through if not hovering directly on tooltip content */
+        overflow: hidden; /* Hide overflow content if it gets too long */
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; /* Match Streamlit's font */
+    }}
+
+    .tooltip-wrapper:hover .tooltip-content {{
+        visibility: visible;
+        opacity: 1;
+        pointer-events: auto; /* Re-enable pointer events when visible for interaction */
+    }}
+
+    .tooltip-wrapper .tooltip-content ul {{
+        list-style-type: none; /* Remove default bullet points */
+        padding: 0;
+        margin: 0;
+    }}
+
+    .tooltip-wrapper .tooltip-content li {{
+        margin-bottom: 4px;
+        font-size: 13px;
+        white-space: nowrap; /* Prevent wrapping for individual list items */
+        text-overflow: ellipsis; /* Add ellipsis if content is too long for nowrap */
+        overflow: hidden;
+    }}
+    .tooltip-wrapper .tooltip-content li:last-child {{
+        margin-bottom: 0; /* No bottom margin on the last item */
+    }}
+
+    /* Tooltip arrow (optional) */
+    .tooltip-wrapper .tooltip-content::after {{
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: #333 transparent transparent transparent;
+    }}
+
+    /* Specific color for Net Flow value */
+    .net-flow-value-color {{
+        color: {net_flow_color} !important;
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+
+# --- Display Monthly Projections ---
+# st.markdown("---") # Removed as it's already in the original code's full context
+st.markdown("<h4 class='centered-heading'>Monthly Projections</h4>", unsafe_allow_html=True)
+proj_col1, proj_col2, proj_col3 = st.columns(3)
+
+# Total Projected Income with Tooltip
+with proj_col1:
+    st.markdown(
+        f"""
+        <div class="custom-metric-container tooltip-wrapper">
+            <div class="custom-metric-label">Projected Income</div>
+            <div class="custom-metric-value">${total_monthly_income:,.2f}</div>
+            <div class="tooltip-content">
+                <span style='font-weight: normal; margin-bottom: 5px; display: block;'>Income Breakdown:</span>
+                {income_tooltip_content}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Total Projected Expenses with Tooltip
+with proj_col2:
+    st.markdown(
+        f"""
+        <div class="custom-metric-container tooltip-wrapper">
+            <div class="custom-metric-label">Projected Expenses</div>
+            <div class="custom-metric-value">${total_monthly_expenses:,.2f}</div>
+            <div class="tooltip-content">
+                <span style='font-weight: normal; margin-bottom: 5px; display: block;'>Expense Breakdown:</span>
+                {expenses_tooltip_content}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Projected Net Flow (colored, no tooltip for this one)
+with proj_col3:
+    st.markdown(
+        f"""
+        <div class="custom-metric-container">
+            <div class="custom-metric-label">Projected Net Flow</div>
+            <div class="custom-metric-value net-flow-value-color">
+                ${monthly_net_flow:,.2f}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+st.markdown("---")
+
+####################################################################################
+# ---- Generate Calendar Data ----
+def generate_calendar_data(year, month):
+    num_weeks = calendar.monthcalendar(year, month)
+    calendar_grid = []
+
+    for week in num_weeks:
+        row = []
+        for day in week:
+            if day == 0:
+                row.append("")
+            else:
+                current_date = date(year, month, day)
+                cell_classes = []
+
+                if current_date == today:
+                    cell_classes.append("today")
+                elif current_date < today:
+                    cell_classes.append("past-day")
+                else:
+                    cell_classes.append("future-day") # This class isn't strictly necessary as it's the default, but good for clarity
+
+                class_str = " ".join(cell_classes)
+                content = f"<div class='day-content {class_str}'><strong>{day}</strong>"
+
+
+                # Adding Paycheck to calendar
+                days_since_start = (current_date - paycheck_start_date).days
+                if days_since_start >= 0 and days_since_start % 14 == 0:
+                    content += (
+                        "<div style='margin-top: 4px; background-color: #a8f496; border-radius: 5px; "
+                        "padding: 2px 4px; font-size: 12px;'>Paycheck</div>"
+                    )
+
+
+                #Adding Bills to calendar
+                for bill in bill_schedule:
+                    if bill["type"] == "fixed":
+                        if current_date.day == bill["day"]:
+                            content += (
+                                f"<div style='margin-top: 4px; background-color: #f8d7da; border-radius: 5px; "
+                                f"padding: 2px 4px; font-size: 12px;'>{bill['name']}</div>"
+                            )
+                    elif bill["type"] == "range":
+                        if bill["start_day"] <= current_date.day <= bill["end_day"]:
+                            content += (
+                                f"<div style='margin-top: 4px; background-color: #f8d7da; border-radius: 5px; "
+                                f"padding: 2px 4px; font-size: 12px;'>{bill['name']}</div>"
+                            )
+                    elif bill["type"] == "recurring":
+                        days_since_start = (current_date - bill["start_date"]).days
+                        if days_since_start >= 0 and days_since_start % bill["interval"] == 0:
+                            content += (
+                                f"<div style='margin-top: 4px; background-color: #f8d7da; border-radius: 5px; "
+                                f"padding: 2px 4px; font-size: 12px;'>{bill['name']}</div>"
+                            )
+
+                content += "</div>" # Close day-content div
+                row.append(content)
+        calendar_grid.append(row)
+    return calendar_grid
+
+
+calendar_data = generate_calendar_data(this_year, selected_month)
+
+# ---- Display Calendar ----
+st.markdown(f"### {month_name} {this_year}")
+
+df = pd.DataFrame(calendar_data, columns=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+calendar_html = df.to_html(escape=False, index=False)
+
+# Inject custom CSS to style the table
+styled_calendar_html = f"""
+<style>
+    table {{
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }}
+    th, td {{
+        border: 1px solid #ddd;
+        padding: 10px;
+        text-align: center;
+        vertical-align: top;
+        font-size: 16px;
+        word-wrap: break-word;
+        height: 100px;
+        position: relative; /* Needed for absolute positioning of markers */
+    }}
+
+    /* Styles for past days */
+    .past-day {{
+        background-color: #f0f0f0; /* Slightly darker grey for past days */
+        color: #888; /* Dim text for past days */
+    }}
+
+    /* Styles for today */
+    .today {{
+        background-color: #e6f7ff; /* Light blue background for today */
+        border: 2px solid #007bff; /* Blue border for today */
+        box-shadow: 0 0 5px rgba(0, 123, 255, 0.5); /* Slight shadow for today */
+    }}
+
+    /* Optional: Style for future days (default background is fine) */
+    .future-day {{
+        background-color: #ffffff; /* White background for future days */
+    }}
+
+    .day-content {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+    }}
+
+    /* You might want to adjust the top margin for the content within the cell */
+    .day-content strong {{
+        margin-bottom: 5px; /* Space between day number and event boxes */
+    }}
+</style>
+<div style='width: 100%; overflow-x: auto;'>{calendar_html}</div>
+"""
+
+st.markdown(styled_calendar_html, unsafe_allow_html=True)
