@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timedelta, date
 import calendar
 import pandas as pd
+import plotly.express as px
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Dashboard", layout="wide")
@@ -13,10 +14,82 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+st.markdown(f"""
+<style>
+    /* Styling for each individual account box */
+    .account-box {{
+        border: 1px solid #ddd;
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem; /* Generous padding for good spacing */
+        margin-bottom: 0.75rem; /* Space between boxes */
+        background-color: #f9f9f9;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.07);
+        text-align: center; /* Center align all content */
+        overflow: hidden;
+    }}
 
+    /* Account Name (subheader) */
+    .account-box h3 {{
+        font-size: 22px; /* A bit larger for prominence */
+        margin-top: 0.2rem;
+        margin-bottom: 0.5rem; /* Space below the name */
+        color: #333;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }}
+
+    /* Current Balance Label */
+    .balance-label {{
+        font-size: 14px; /* Clear and readable */
+        color: grey;
+        margin-bottom: -0.2rem; /* Pull label closer to value */
+        line-height: 1;
+    }}
+
+    /* Current Balance Value */
+    .balance-value {{
+        font-size: 32px; /* Very prominent balance value */
+        font-weight: normal;
+        color: #000;
+        line-height: 1.2;
+    }}
+
+    /* --- Plotly Chart and Global Streamlit Styles (Keep these for consistency) --- */
+
+    /* Plotly Chart Title */
+    .modebar-container + div > .plotly-notifier,
+    .js-plotly-plot .plotly .main-svg .infolayer .gtitle .g-gtitle {{
+        font-size: 16px !important;
+    }}
+    .js-plotly-plot .plotly .main-svg .infolayer .gtitle .g-gtitle text {{
+        font-size: 16px !important;
+    }}
+
+    /* Plotly Legend Text */
+    .js-plotly-plot .plotly .main-svg .legend .g-gname text {{
+        font-size: 10px !important;
+    }}
+
+    /* Global Streamlit H2/H4 titles */
+    h2 {{
+        font-size: 2rem;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+    }}
+    h4 {{
+        font-size: 1.3rem;
+        margin-top: 1rem;
+        margin-bottom: 0.75rem;
+    }}
+
+</style>
+""", unsafe_allow_html=True)
 
 ############################################################################## Account Balances ############################################################################################
 st.markdown("<h2 style='text-align: left;'>Account Balances</h2>", unsafe_allow_html=True)
+
 
 # --- Time Range Selector (Dropdown) ---
 st.markdown("###### Select time range")
@@ -35,6 +108,7 @@ with st.spinner("Loading your dashboard..."):
     time.sleep(0.85)
 
     # --- Simulated Account Data ---
+    # Moved inside the spinner so data is loaded after delay
     accounts = {
         "Needs": {"balance": 2500, "income": 4000, "expenses": 3200},
         "Wants": {"balance": 1500, "income": 1200, "expenses": 900},
@@ -50,37 +124,60 @@ with st.spinner("Loading your dashboard..."):
     }
     multiplier = days_factor[time_range]
 
-    # --- Display Account Summaries in Columns ---
-    with st.container():
-        cols = st.columns(4)
+    # --- Main Layout: Two Columns (Account Info | Pie Chart) ---
+    # Adjust column ratios as needed, e.g., [1, 1.5] for more chart space
+    account_info_col, chart_col = st.columns([1, 1])
 
-        for i, (acct_name, data) in enumerate(accounts.items()):
+    with account_info_col:
+        st.markdown("#### Account Details")
+        # Display Account Summaries Vertically
+        for acct_name, data in accounts.items():
+            # Keep these calculations for now, as they don't affect display if not used
             income = round(data["income"] * multiplier)
             expenses = round(data["expenses"] * multiplier)
             net_change = income - expenses
 
-            # Determine the color based on net_change
-            if net_change >= 0:
-                color = "green"
-            else:
-                color = "red"
+            # No need for income_color/expenses_color if not displaying those metrics
 
-            with cols[i]:
-                st.subheader(acct_name)
-                st.metric(label="Balance", value=f"${data['balance']:,}") # Keep balance as a standard metric
+            # <<< START COPY FROM HERE (inclusive of the st.markdown line) >>>
+            st.markdown(
+                f"""
+                <div class="account-box">
+                    <h3>{acct_name}</h3>
+                    <div class="balance-label">Current Balance</div>
+                    <div class="balance-value">${data['balance']:,}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-                # Display Net Change with dynamic color using markdown
-                st.markdown(
-                    f"""
-                    <div style='text-align: left;'>
-                        <div style='font-size: 14px; color: grey;'>Net Change</div>
-                        <div style='font-size: 24px; color: {color};'>
-                            ${net_change:,}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+    with chart_col:
+        st.markdown("#### Balance Distribution")
+
+        # Prepare data for the pie chart
+        # We need account names (labels) and their current balances (values)
+        pie_chart_data = {
+            "Account": list(accounts.keys()),
+            "Balance": [data["balance"] for data in accounts.values()]
+        }
+
+        # Create the pie chart using Plotly Express
+        fig = px.pie(
+            pie_chart_data,
+            values='Balance',
+            names='Account',
+            title='Current Balance Allocation',
+            hole=0.3, # Creates a donut chart
+            color_discrete_sequence=px.colors.sequential.RdBu # Choose a color sequence
+        )
+
+        # Update layout for better appearance
+        fig.update_traces(textinfo='percent+label', pull=[0.05]*len(accounts)) # Show label and percentage, slight pull effect
+        fig.update_layout(showlegend=True, margin=dict(l=20, r=20, t=30, b=20)) # Adjust margins
+
+        st.plotly_chart(fig, use_container_width=True)
+
+
 st.markdown("---")
 ############################################################################## end of section ############################################################################################
 
