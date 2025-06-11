@@ -86,6 +86,13 @@ st.markdown(f"""
 
 </style>
 """, unsafe_allow_html=True)
+################################################################################# SimpleFIN ###############################################################################################
+from simplefin_utils import get_simplefin_data
+
+data = get_simplefin_data()
+
+# Use example I created in simplefin_utils.py
+
 
 ############################################################################## Account Balances ############################################################################################
 st.markdown("<h2 style='text-align: left;'>Account Balances</h2>", unsafe_allow_html=True)
@@ -654,3 +661,14 @@ styled_calendar_html = f"""
 
 st.markdown(styled_calendar_html, unsafe_allow_html=True)
 ############################################################################## end of section ############################################################################################
+
+# first_check_minimum = 1500
+# second_check_minimum = 4000
+
+
+
+# first_transfer_amount = (paycheck_amount + 1500) - first_check_minimum #The 1500 is the amount in needs (SimpleFIN), which is a placeholder for now.
+# second_transfer_amount = (paycheck_amount + 2500) - second_check_minimum #The 2500 is the amount in needs (SimpleFIN), which is a placeholder for now.
+
+# st.markdown(f"You are eligible for a ${first_transfer_amount} transfer this check.")
+# st.markdown(f"You are eligible for a ${second_transfer_amount} transfer this check.")
