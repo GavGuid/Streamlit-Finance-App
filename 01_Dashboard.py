@@ -5,6 +5,8 @@ import calendar
 import pandas as pd
 import plotly.express as px
 
+from simplefin_utils import get_simplefin_data
+
 # --- Page Configuration ---
 st.set_page_config(page_title="Dashboard", layout="wide")
 
@@ -87,27 +89,36 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 ################################################################################# SimpleFIN ###############################################################################################
-from simplefin_utils import get_simplefin_data
-
 data = get_simplefin_data()
 
-# Use example I created in simplefin_utils.py
+needs_account = next(acc for acc in data['accounts'] if acc['name'] == 'Needs - 2188')
+wants_account = next(acc for acc in data['accounts'] if acc['name'] == 'Wants - 8700')
+planned_account = next(acc for acc in data['accounts'] if acc['name'] == 'Planned Expenses - 6501')
 
+# st.markdown(needs_account['balance'])  # Print the first 5 transactions for debugging
 
 ############################################################################## Account Balances ############################################################################################
 st.markdown("<h2 style='text-align: left;'>Account Balances</h2>", unsafe_allow_html=True)
 
 
 # --- Time Range Selector (Dropdown) ---
-st.markdown("###### Select time range")
-col_select, _ = st.columns([0.25, 2])  # make the dropdown smaller
-with col_select:
-    time_range = st.selectbox(
-        "Select time range",
-        options=["Last 7 days", "Last 14 days", "Last 30 days"],
-        index=2,
-        label_visibility="collapsed"
-    )
+# st.markdown("###### Select time range")
+# col_select, _ = st.columns([0.25, 2])  # make the dropdown smaller
+# with col_select:
+#     time_range = st.selectbox(
+#         "Select time range",
+#         options=["Last 7 days", "Last 14 days", "Last 30 days"],
+#         index=2,
+#         label_visibility="collapsed"
+#     )
+
+    # Corresponding multiplier for income/expense scaling
+    # days_factor = {
+    #     "Last 7 days": 0.25,
+    #     "Last 14 days": 0.5,
+    #     "Last 30 days": 1
+    # }
+    # multiplier = days_factor[time_range]
 
 
 # --- Simulate a Loading Spinner ---
@@ -116,20 +127,23 @@ with st.spinner("Loading your dashboard..."):
 
     # --- Simulated Account Data ---
     # Moved inside the spinner so data is loaded after delay
-    accounts = {
-        "Needs": {"balance": 2500, "income": 4000, "expenses": 3200},
-        "Wants": {"balance": 1500, "income": 1200, "expenses": 900},
-        "Planned": {"balance": 800, "income": 500, "expenses": 200},
-        "HYSA": {"balance": 10000, "income": 50, "expenses": 0},
-    }
+    # accounts = {
+    #     "Needs": {"balance": 2500, "income": 4000, "expenses": 3200},
+    #     "Wants": {"balance": 1500, "income": 1200, "expenses": 900},
+    #     "Planned": {"balance": 800, "income": 500, "expenses": 200},
+    #     "HYSA": {"balance": 10000, "income": 50, "expenses": 0},
+    # }
 
-    # --- Adjust Net Change Based on Time Range ---
-    days_factor = {
-        "Last 7 days": 0.25,
-        "Last 14 days": 0.5,
-        "Last 30 days": 1
-    }
-    multiplier = days_factor[time_range]
+    accounts = {
+    "Needs": {"balance": float(needs_account['balance']), "income": 4000, "expenses": 3200},
+    "Wants": {"balance": float(wants_account['balance']), "income": 1200, "expenses": 900},
+    "Planned": {"balance": float(planned_account['balance']), "income": 500, "expenses": 200}
+    # "HYSA": {"balance": 10000, "income": 50, "expenses": 0},
+}
+
+
+
+
 
     # --- Main Layout: Two Columns (Account Info | Pie Chart) ---
     # Adjust column ratios as needed, e.g., [1, 1.5] for more chart space
@@ -138,21 +152,21 @@ with st.spinner("Loading your dashboard..."):
     with account_info_col:
         st.markdown("#### Account Details")
         # Display Account Summaries Vertically
-        for acct_name, data in accounts.items():
+        for acct_name, acc_data in accounts.items():
             # Keep these calculations for now, as they don't affect display if not used
-            income = round(data["income"] * multiplier)
-            expenses = round(data["expenses"] * multiplier)
-            net_change = income - expenses
+            # income = round(acc_data["income"] * multiplier)
+            # expenses = round(acc_data["expenses"] * multiplier)
+            # net_change = income - expenses
 
             # No need for income_color/expenses_color if not displaying those metrics
 
-            # <<< START COPY FROM HERE (inclusive of the st.markdown line) >>>
+            
             st.markdown(
                 f"""
                 <div class="account-box">
                     <h3>{acct_name}</h3>
                     <div class="balance-label">Current Balance</div>
-                    <div class="balance-value">${data['balance']:,}</div>
+                    <div class="balance-value">${acc_data['balance']:,.2f}</div>
                 </div>
                 """,
                 unsafe_allow_html=True
