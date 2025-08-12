@@ -153,7 +153,7 @@ with st.spinner("Loading your dashboard..."):
         st.markdown("#### Account Details")
         # Display Account Summaries Vertically
         for acct_name, acc_data in accounts.items():
-            # Keep these calculations for now, as they don't affect display if not used
+            # maybe can get rid of these?
             # income = round(acc_data["income"] * multiplier)
             # expenses = round(acc_data["expenses"] * multiplier)
             # net_change = income - expenses
@@ -206,7 +206,8 @@ st.markdown("---")
 
 
 ########################################################################## Income & Bills Schedule #######################################################################################
-
+# Get today's date
+today = datetime.now().date()
 st.markdown("<h2 style='text-align: left;'>Income & Bills Schedule</h2>", unsafe_allow_html=True)
 
 # ---- Configuration ----
@@ -218,6 +219,7 @@ bill_schedule = [
     {"name": "Car Insurance: $165.26", "type": "fixed", "day": 23, "amount": 165.26},
     {"name": "Internet: $71.40", "type": "fixed", "day": 13, "amount": 71.40},
     {"name": "Student Loan: $141.27", "type": "fixed", "day": 7, "amount": 141.27},
+    {"name": "Utilities: ~$200", "type": "fixed", "day": 13, "amount": 200.00},
     
     #Range
     # {"name": "Utilities", "type": "range", "start_day": 13, "end_day": 15},
@@ -225,8 +227,11 @@ bill_schedule = [
     #Recurring
     {"name": "Prime Membership: $16.19", "type": "recurring", "start_date": date(2025, 1, 29), "interval": 30, "amount": 16.19},
 
+    #Monthly Weekday
+    {"name": "YouTube Premium: $15.25", "type": "monthly_weekday", "weekday": 0, "week_number": 1, "amount": 15.25},
+
+
     #Variable Days / Amounts
-    {"name": "Utilities: ~$200", "type": "fixed", "day": 13, "amount": 200.00},
     {"name": "Groceries: ~$400", "type": "variable_estimate", "amount": 400.00},
     {"name": "Gas: ~$200", "type": "variable_estimate", "amount": 200.00},
     # {"name": "Dining Out", "type": "variable_estimate", "amount": 150.00},
@@ -240,8 +245,7 @@ income_schedule = [
 ]
 
 
-# Get today's date
-today = datetime.now().date()
+
 
 # ---- Date Picker ----
 this_year = datetime.now().year
@@ -253,7 +257,45 @@ with col1:
     month_name = st.selectbox("Select month", list(months.keys()), index=datetime.now().month - 1)
 selected_month = months[month_name]
 ############################################################################## end of section ##########################################################################################
+def get_nth_weekday(year, month, weekday, n):
+    """
+    weekday: 0=Mon, 6=Sun
+    n: occurrence number (1=first, 2=second, etc.)
+    """
+    first_day = date(year, month, 1)
+    days_until_weekday = (weekday - first_day.weekday() + 7) % 7
+    first_occurrence = first_day + timedelta(days=days_until_weekday)
+    return first_occurrence + timedelta(weeks=n - 1)
 
+def get_due_date(bill, year, month):
+    if bill["type"] == "fixed":
+        return date(year, month, bill["day"])
+    elif bill["type"] == "recurring":
+        start = bill["start_date"]
+        days_since_start = (today - start).days
+        if days_since_start >= 0 and days_since_start % bill["interval"] == 0:
+            return today
+        else:
+            return None
+    elif bill["type"] == "monthly_weekday":
+        return get_nth_weekday(year, month, bill["weekday"], bill["week_number"])
+    return None
+
+
+year = datetime.now().year
+month = selected_month
+
+projected_expenses = 0
+paid_expenses = 0
+
+for bill in bill_schedule:
+    due_date = get_due_date(bill, year, month)
+    if due_date:  # bill occurs this month
+        projected_expenses += bill.get("amount", 0)
+        if due_date < today:
+            paid_expenses += bill.get("amount", 0)
+
+to_be_paid = projected_expenses - paid_expenses
 
 
 ####################################################################### Calculate Income / Expenses ####################################################################################
@@ -299,6 +341,8 @@ for income_source in income_schedule:
     #             "date": date(this_year, selected_month, income_source["day"]).strftime("%b %d"),
     #             "amount": income_source["amount"]
     #         })
+
+
 
 # Expenses
 for bill in bill_schedule:
@@ -348,6 +392,19 @@ for bill in bill_schedule:
             "date": "Monthly Estimate", # Indicates it's a general monthly estimate
             "amount": bill["amount"]
         })
+
+    elif bill["type"] == "monthly_weekday":
+        due_date = get_nth_weekday(this_year, selected_month, bill["weekday"], bill["week_number"])
+        if first_day_of_month <= due_date <= last_day_of_month:
+            total_monthly_expenses += bill["amount"]
+            expense_contributions.append({
+                "name": bill["name"],
+                "date": due_date.strftime("%b %d"),
+                "amount": bill["amount"]
+            })
+
+
+
 ############################################################################## end of section ###########################################################################################
 
 
@@ -478,7 +535,7 @@ expenses_tooltip_content = generate_tooltip_html(expense_contributions)
 
 
 st.markdown("<h4 class='centered-heading'>Monthly Projections</h4>", unsafe_allow_html=True)
-proj_col1, proj_col2, proj_col3 = st.columns(3)
+proj_col1, proj_col2, proj_col3, proj_col4, proj_col5 = st.columns(5)
 
 # Projected Income with Tooltip
 with proj_col1:
@@ -525,6 +582,40 @@ with proj_col3:
         """,
         unsafe_allow_html=True
     )
+
+# Bills that have already been paid this month
+with proj_col4:
+    st.markdown(
+        f"""
+        <div class="custom-metric-container tooltip-wrapper">
+            <div class="custom-metric-label">Paid</div>
+            <div class="custom-metric-value">${paid_expenses:,.2f}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Bills that are yet to be paid this month
+with proj_col5:
+    st.markdown(
+        f"""
+        <div class="custom-metric-container tooltip-wrapper">
+            <div class="custom-metric-label">To Be Paid</div>
+            <div class="custom-metric-value">${to_be_paid:,.2f}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# st.subheader("Monthly Projections")
+# col1, col2, col3, col4, col5 = st.columns(5)
+# col1.metric("Projected Income", f"${total_monthly_income:,.2f}")
+# col2.metric("Projected Expenses", f"${projected_expenses:,.2f}")
+# col3.metric("Paid", f"${paid_expenses:,.2f}")
+# col4.metric("To Be Paid", f"${to_be_paid:,.2f}")
+# col5.metric("Projected Net Flow", "—")  # placeholder until income is added
 ############################################################################## end of section ###########################################################################################
 
 
@@ -599,6 +690,14 @@ def generate_calendar_data(year, month):
                     elif bill["type"] == "recurring":
                         days_since_start = (current_date - bill["start_date"]).days
                         if days_since_start >= 0 and days_since_start % bill["interval"] == 0:
+                            content += (
+                                f"<div style='margin-top: 4px; background-color: #f8d7da; border-radius: 5px; "
+                                f"padding: 2px 4px; font-size: 12px;'>{bill['name']}</div>"
+                            )
+
+                    elif bill["type"] == "monthly_weekday":
+                        due_date = get_nth_weekday(current_date.year, current_date.month, bill["weekday"], bill["week_number"])
+                        if current_date == due_date:
                             content += (
                                 f"<div style='margin-top: 4px; background-color: #f8d7da; border-radius: 5px; "
                                 f"padding: 2px 4px; font-size: 12px;'>{bill['name']}</div>"
